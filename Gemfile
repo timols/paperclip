@@ -2,7 +2,7 @@ source "http://rubygems.org"
 
 gem "activerecord", :require => "active_record"
 gem "appraisal"
-gem "aws-s3", :require => "aws/s3"
+gem "aws-sdk"
 gem "bundler"
 gem "cocaine", "~>0.2"
 gem "fog"
