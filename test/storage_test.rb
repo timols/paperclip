@@ -1,5 +1,5 @@
 require './test/helper'
-require 'aws/s3'
+require 'aws-sdk'
 
 class StorageTest < Test::Unit::TestCase
   def rails_env(env)
@@ -41,7 +41,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "Parsing S3 credentials" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :bucket => "testing",
                     :s3_credentials => {:not => :important}
@@ -72,7 +72,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {},
                     :bucket => "bucket",
@@ -89,7 +89,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "s3_host_name" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {},
                     :bucket => "bucket",
@@ -106,7 +106,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "An attachment that uses S3 for storage and has styles that return different file types" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :styles  => { :large => ['500x500#', :jpg] },
                     :storage => :s3,
                     :bucket  => "bucket",
@@ -131,7 +131,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {},
                     :bucket => "bucket",
@@ -148,7 +148,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {
                       :production   => { :bucket => "prod_bucket" },
@@ -168,7 +168,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "generating a url with a proc as the host alias" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => { :bucket => "prod_bucket" },
                     :s3_host_alias => Proc.new { |image| "cdn#{image.size.to_i % 4}.example.com" },
@@ -190,7 +190,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {},
                     :bucket => "bucket",
@@ -207,7 +207,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "Generating a secure url with an expiration" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {
                       :production   => { :bucket => "prod_bucket" },
@@ -222,9 +222,7 @@ class StorageTest < Test::Unit::TestCase
 
       @dummy = Dummy.new
       @dummy.avatar = StringIO.new(".")
-
-      AWS::S3::S3Object.expects(:url_for).with("avatars/stringio.txt", "prod_bucket", { :expires_in => 3600, :use_ssl => true })
-
+      AWS.config({:access_key_id => 'bogus', :secret_access_key => 'bogus'})
       @dummy.avatar.expiring_url
     end
 
@@ -235,7 +233,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "Generating a url with an expiration" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {
                       :production   => { :bucket => "prod_bucket" },
@@ -251,10 +249,8 @@ class StorageTest < Test::Unit::TestCase
       @dummy = Dummy.new
       @dummy.avatar = StringIO.new(".")
 
-      AWS::S3::S3Object.expects(:url_for).with("avatars/original/stringio.txt", "prod_bucket", { :expires_in => 3600, :use_ssl => true })
+      AWS.config({:access_key_id => 'bogus', :secret_access_key => 'bogus'})
       @dummy.avatar.expiring_url
-
-      AWS::S3::S3Object.expects(:url_for).with("avatars/thumb/stringio.txt", "prod_bucket", { :expires_in => 1800, :use_ssl => true })
       @dummy.avatar.expiring_url(1800, :thumb)
     end
 
@@ -265,7 +261,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "Parsing S3 credentials with a bucket in them" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {
                       :production   => { :bucket => "prod_bucket" },
@@ -287,7 +283,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "Parsing S3 credentials with a s3_host_name in them" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :s3_credentials => {
                       :production   => {:s3_host_name => "s3-world-end.amazonaws.com"},
@@ -368,11 +364,7 @@ class StorageTest < Test::Unit::TestCase
 
       context "and saved without a bucket" do
         setup do
-          class AWS::S3::NoSuchBucket < AWS::S3::ResponseError
-            # Force the class to be created as a proper subclass of ResponseError thanks to AWS::S3's autocreation of exceptions
-          end
-          AWS::S3::Bucket.expects(:create).with("testing")
-          AWS::S3::S3Object.stubs(:store).raises(AWS::S3::NoSuchBucket.new(:message, :response)).then.returns(true)
+          AWS::S3::S3Object.stubs(:write).raises(AWS::S3::Errors::NoSuchBucket.new(:message)).then.returns(true)
           @dummy.save
         end
 
@@ -397,7 +389,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "An attachment with S3 storage and bucket defined as a Proc" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :bucket => lambda { |attachment| "bucket_#{attachment.instance.other}" },
                     :s3_credentials => {:not => :important}
@@ -411,7 +403,7 @@ class StorageTest < Test::Unit::TestCase
 
   context "An attachment with S3 storage and specific s3 headers set" do
     setup do
-      AWS::S3::Base.stubs(:establish_connection!)
+      AWS.stub!
       rebuild_model :storage => :s3,
                     :bucket => "testing",
                     :path => ":attachment/:style/:basename.:extension",
@@ -433,7 +425,7 @@ class StorageTest < Test::Unit::TestCase
 
       context "and saved" do
         setup do
-          AWS::S3::Base.stubs(:establish_connection!)
+          AWS.stub!
           AWS::S3::S3Object.stubs(:store).with(@dummy.avatar.path,
                                                anything,
                                                'testing',
@@ -467,8 +459,8 @@ class StorageTest < Test::Unit::TestCase
 
      should "parse the credentials" do
        assert_equal 'pathname_bucket', @dummy.avatar.bucket_name
-       assert_equal 'pathname_key', AWS::S3::Base.connection.options[:access_key_id]
-       assert_equal 'pathname_secret', AWS::S3::Base.connection.options[:secret_access_key]
+       assert_equal 'pathname_key', AWS.config.access_key_id
+       assert_equal 'pathname_secret', AWS.config.secret_access_key
      end
   end
 
@@ -490,8 +482,8 @@ class StorageTest < Test::Unit::TestCase
 
     should "run the file through ERB" do
       assert_equal 'env_bucket', @dummy.avatar.bucket_name
-      assert_equal 'env_key', AWS::S3::Base.connection.options[:access_key_id]
-      assert_equal 'env_secret', AWS::S3::Base.connection.options[:secret_access_key]
+      assert_equal 'env_key', AWS.config.access_key_id
+      assert_equal 'env_secret', AWS.config.secret_access_key
     end
   end
   
@@ -518,12 +510,7 @@ class StorageTest < Test::Unit::TestCase
 
         context "and saved" do
           setup do
-            AWS::S3::Base.stubs(:establish_connection!)
-            AWS::S3::S3Object.expects(:store).with(@dummy.avatar.path,
-                                                 anything,
-                                                 'testing',
-                                                 :content_type => 'image/png',
-                                                 :access => :public_read)
+            AWS.stub!
             @dummy.save
           end
 
@@ -557,12 +544,7 @@ class StorageTest < Test::Unit::TestCase
     
         context "and saved" do
           setup do
-            AWS::S3::Base.stubs(:establish_connection!)
-            AWS::S3::S3Object.expects(:store).with(@dummy.avatar.path,
-                                                   anything,
-                                                   'testing',
-                                                   :content_type => 'image/png',
-                                                   :access => 'private')
+            AWS.stub!
             @dummy.save
           end
     
@@ -602,14 +584,7 @@ class StorageTest < Test::Unit::TestCase
     
         context "and saved" do
           setup do
-            AWS::S3::Base.stubs(:establish_connection!)
-            [:thumb, :original].each do |style|
-              AWS::S3::S3Object.expects(:store).with("avatars/#{style}/5k.png",
-                                                    anything,
-                                                    'testing',
-                                                    :content_type => 'image/png',
-                                                    :access => style == :thumb ? 'public-read' : 'private')
-            end
+            AWS.stub!
             @dummy.save
           end
     
