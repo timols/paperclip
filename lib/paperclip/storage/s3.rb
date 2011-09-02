@@ -70,9 +70,9 @@ module Paperclip
     module S3
       def self.extended base
         begin
-          require 'aws/s3'
+          require 'aws-sdk'
         rescue LoadError => e
-          e.message << " (You may need to install the aws-s3 gem)"
+          e.message << " (You may need to install the aws-sdk gem)"
           raise e
         end unless defined?(AWS::S3)
 
@@ -95,7 +95,7 @@ module Paperclip
             @url          = ":s3_path_url"
           end
           @url            = ":asset_host" if @options[:url].to_s == ":asset_host"
-          AWS::S3::Base.establish_connection!( @s3_options.merge(
+          AWS.config( @s3_options.merge(
             :access_key_id => @s3_credentials[:access_key_id],
             :secret_access_key => @s3_credentials[:secret_access_key]
           ))
@@ -115,11 +115,19 @@ module Paperclip
       end
 
       def expiring_url(time = 3600, style_name = default_style)
-        AWS::S3::S3Object.url_for(path(style_name), bucket_name, :expires_in => time, :use_ssl => (s3_protocol(style_name) == 'https'))
+        s3_object(path(style_name)).url_for(:read, :expires_in => time, :use_ssl => (s3_protocol(style_name) == 'https'))
       end
 
       def bucket_name
         @bucket
+      end
+
+      def s3_bucket options={}
+        AWS::S3::Bucket.new(bucket_name, options)
+      end
+
+      def s3_object key=path(default_style), options={}
+        AWS::S3::S3Object.new(s3_bucket, key, options)
       end
 
       def s3_host_name 
@@ -147,7 +155,7 @@ module Paperclip
 
       def exists?(style = default_style)
         if original_filename
-          AWS::S3::S3Object.exists?(path(style), bucket_name)
+          s3_object.exists?
         else
           false
         end
@@ -170,29 +178,28 @@ module Paperclip
         basename = File.basename(filename, extname)
         file = Tempfile.new([basename, extname])
         file.binmode
-        file.write(AWS::S3::S3Object.value(path(style), bucket_name))
+        file.write(s3_object(filename).read)
         file.rewind
         return file
       end
 
       def create_bucket
-        AWS::S3::Bucket.create(bucket_name)
+        AWS::S3::BucketCollection.create(bucket_name)
       end
 
       def flush_writes #:nodoc:
         @queued_for_write.each do |style, file|
           begin
             log("saving #{path(style)}")
-            AWS::S3::S3Object.store(path(style),
-                                    file,
-                                    bucket_name,
-                                    {:content_type => file.content_type.to_s.strip,
-                                     :access => (@s3_permissions[style] || @s3_permissions[:default]),
-                                    }.merge(@s3_headers))
-          rescue AWS::S3::NoSuchBucket => e
+            s3_object(path(style), {
+                              :content_type => file.content_type.to_s.strip,
+                              :access => (@s3_permissions[style] || @s3_permissions[:default]),
+                             }.merge(@s3_headers)
+            ).write(file)
+          rescue AWS::S3::Errors::NoSuchBucket => e
             create_bucket
             retry
-          rescue AWS::S3::ResponseError => e
+          rescue AWS::S3::Errors::Base => e
             raise
           end
         end
@@ -206,8 +213,8 @@ module Paperclip
         @queued_for_delete.each do |path|
           begin
             log("deleting #{path}")
-            AWS::S3::S3Object.delete(path, bucket_name)
-          rescue AWS::S3::ResponseError
+            s3_object(path).delete(path, bucket_name)
+          rescue AWS::S3::Errors::ClientError
             # Ignore this.
           end
         end
