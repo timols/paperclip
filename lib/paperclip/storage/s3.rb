@@ -213,7 +213,7 @@ module Paperclip
         @queued_for_delete.each do |path|
           begin
             log("deleting #{path}")
-            s3_object(path).delete(path, bucket_name)
+            s3_object(path).delete
           rescue AWS::S3::Errors::ClientError
             # Ignore this.
           end
